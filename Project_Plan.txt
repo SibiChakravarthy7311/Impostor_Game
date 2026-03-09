@@ -1,0 +1,84 @@
+﻿Imposter Game Project Plan
+Date: 2026-03-09
+
+1) Objective
+Build a web-based multiplayer Imposter game inspired by gameonfamily, with custom lead-impostor round logic:
+- Vote elimination and lead kill can both happen in same round.
+- Lead cannot kill self.
+- Vote ties: lead vote is tie-breaker only.
+- If lead is vote-eliminated, kill is cancelled.
+- Reveal remaining impostor count after each round.
+- Leadership transfer occurs next round if lead is removed.
+
+2) Chosen Stack
+- Frontend: Next.js + TypeScript + Tailwind
+- Backend: Supabase Postgres + SQL resolver function + optional Edge Function wrapper
+- Realtime transport: Supabase Realtime channels
+- Hosting: Vercel (frontend) + Supabase Free (backend)
+
+3) Build Status
+Core + Phase 2 completed:
+- Next.js app structure and routes
+- Game create/join/start APIs
+- Vote/kill submission APIs
+- Round resolution API calling DB RPC
+- Core schema migration and resolve_round SQL function
+- QR join flow
+- Session-based permission hardening
+- Host/player/lead endpoint guards
+- Dropdown-based vote/kill UX
+- Supabase Realtime page auto-refresh
+
+Phase 3 completed:
+- Private role reveal screen (`/game/:id/role`)
+- Voting timer configuration at game creation
+- Per-round deadline (`rounds.voting_ends_at`)
+- Host auto-resolve when timer ends
+- Host voting progress board (who has voted)
+- Vote/kill endpoints reject submissions after timer expiry
+- DB resolver updated to create next round with new timer
+
+4) Architecture Summary
+- Host creates game -> join_code generated
+- Participants join with code/QR
+- Host starts game -> roles assigned + lead impostor set + round timer started
+- Round loop:
+  - collect votes
+  - collect lead kill
+  - timer expires or host resolves
+  - resolve_round() transaction
+  - persist eliminations/events
+  - check win conditions
+  - create next timed round if needed
+
+5) Database Objects
+Tables:
+- games
+- players
+- roles
+- rounds
+- votes
+- kills
+- eliminations
+- events
+- player_sessions
+
+Function:
+- resolve_round(p_game_id uuid, p_round_number integer)
+
+6) Next Improvements (Phase 4 candidates)
+- Persistent background scheduler for timeout resolution (no host-tab dependency)
+- Strong RLS with Supabase Auth identities
+- Cleaner mobile UX for voting and role reveal
+- Resolver test coverage for all tie/edge scenarios
+- Host controls for pause/extend timer
+
+7) Deployment Checklist
+- Create Supabase project
+- Run migrations in order:
+  - supabase/migrations/20260309_init.sql
+  - supabase/migrations/20260309_phase2_sessions.sql
+  - supabase/migrations/20260309_phase3_timer_and_role.sql
+- Configure env vars in Vercel
+- Deploy Next.js app
+- Smoke-test create/join/start/resolve cycle

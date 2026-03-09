@@ -1,0 +1,4 @@
+﻿project_id = "imposter-game"
+
+[functions.resolve-round]
+verify_jwt = false
