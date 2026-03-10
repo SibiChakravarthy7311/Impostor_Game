@@ -64,7 +64,7 @@ export default async function GamePage({ params }: PageProps) {
 
   if (!game) notFound();
 
-  const [{ data: players }, { data: latestRoundEvent }, { data: round }, { data: leadRole }, { data: eliminations }, { data: roles }] = await Promise.all([
+  const [{ data: players }, { data: latestRoundEvent }, roundResult, { data: leadRole }, eliminationsResult, { data: roles }] = await Promise.all([
     supabase.from("players").select("id, game_id, name, is_alive, joined_at, character_emoji_id").eq("game_id", gameId).order("joined_at"),
     supabase
       .from("events")
@@ -88,12 +88,7 @@ export default async function GamePage({ params }: PageProps) {
           .eq("is_lead_impostor", true)
           .maybeSingle()
       : { data: null },
-    round
-      ? await supabase
-          .from("eliminations")
-          .select("player_id, reason")
-          .eq("round_id", round.id)
-      : { data: [] as Array<{ player_id: string; reason: "vote" | "kill" }> },
+    null,
     game.status !== "lobby"
       ? await supabase
           .from("roles")
@@ -101,6 +96,17 @@ export default async function GamePage({ params }: PageProps) {
           .eq("game_id", gameId)
       : { data: [] }
   ]);
+
+  const { data: round } = roundResult as any;
+
+  let eliminations: Array<{ player_id: string; reason: "vote" | "kill" }> = [];
+  if (round) {
+    const { data: eliminationsData } = await supabase
+      .from("eliminations")
+      .select("player_id, reason")
+      .eq("round_id", round.id);
+    eliminations = (eliminationsData as any) ?? [];
+  }
 
   let currentRole: CurrentRole | null = null;
   if (session && game.status !== "lobby") {
@@ -242,26 +248,6 @@ export default async function GamePage({ params }: PageProps) {
         <Link className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-white font-semibold text-sm hover:from-purple-500 hover:to-pink-500 transition-all" href={`/game/${gameId}/role`}>
           👤 View Your Private Role Card
         </Link>
-      ) : null}
-
-      {currentRole?.role === "civilian" && round?.secret_word && round.phase !== "speaking_order" ? (
-        <section className="rounded-lg border-2 border-green-500 bg-gradient-to-br from-green-900/20 to-emerald-900/20 p-6 space-y-3">
-          <p className="text-sm uppercase tracking-widest font-bold text-green-300">🔐 Civilian Secret Word</p>
-          <button
-            type="button"
-            onClick={() => setWordRevealed(!wordRevealed)}
-            className="w-full rounded-lg border-2 border-dashed border-green-400 bg-slate-800/50 p-6 hover:bg-slate-700/50 transition-all"
-          >
-            {wordRevealed ? (
-              <p className="text-3xl font-bold text-green-300">{round.secret_word}</p>
-            ) : (
-              <p className="text-4xl font-bold text-green-400">?</p>
-            )}
-          </button>
-          <p className="text-xs text-gray-400 text-center">
-            {wordRevealed ? "Hide" : "Show"} your word - Give clues to identify impostors, don't say it directly!
-          </p>
-        </section>
       ) : null}
 
       {round?.voting_ends_at && game.status === "in_progress" && round.phase === "voting_open" && (
