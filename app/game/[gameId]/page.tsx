@@ -4,10 +4,25 @@ import { notFound } from "next/navigation";
 import { AutoResolveOnTimeout } from "../../../components/AutoResolveOnTimeout";
 import { GameQrCard } from "../../../components/GameQrCard";
 import { GameRealtime } from "../../../components/GameRealtime";
+import { LobbyRealtime } from "../../../components/LobbyRealtime";
 import { PlayerList } from "../../../components/PlayerList";
 import { RoundTimer } from "../../../components/RoundTimer";
+import { SpeakingOrderPhase } from "../../../components/SpeakingOrderPhase";
+import { VotingPhaseComponent } from "../../../components/VotingPhaseComponent";
+import { ResultsScreenComponent } from "../../../components/ResultsScreenComponent";
 import { SESSION_COOKIE_NAME } from "../../../lib/auth/session";
 import { createServerSupabaseClient } from "../../../lib/supabase/server";
+
+const CHARACTER_EMOJIS: { [key: string]: string } = {
+  "emoji_1": "😀",
+  "emoji_2": "🎮",
+  "emoji_3": "👾",
+  "emoji_4": "🎭",
+  "emoji_5": "🕵️",
+  "emoji_6": "🚀",
+  "emoji_7": "🎸",
+  "emoji_8": "🦸"
+};
 
 type PageProps = {
   params: Promise<{ gameId: string }>;
@@ -49,8 +64,8 @@ export default async function GamePage({ params }: PageProps) {
 
   if (!game) notFound();
 
-  const [{ data: players }, { data: latestRoundEvent }, { data: round }, { data: leadRole }] = await Promise.all([
-    supabase.from("players").select("id, game_id, name, is_alive, joined_at").eq("game_id", gameId).order("joined_at"),
+  const [{ data: players }, { data: latestRoundEvent }, { data: round }, { data: leadRole }, { data: eliminations }, { data: roles }] = await Promise.all([
+    supabase.from("players").select("id, game_id, name, is_alive, joined_at, character_emoji_id").eq("game_id", gameId).order("joined_at"),
     supabase
       .from("events")
       .select("payload_json, created_at")
@@ -61,20 +76,34 @@ export default async function GamePage({ params }: PageProps) {
       .maybeSingle(),
     supabase
       .from("rounds")
-      .select("id, phase, voting_ends_at, secret_word")
+      .select("id, phase, voting_ends_at, secret_word, current_speaker_id, speaking_order, speakers_completed")
       .eq("game_id", gameId)
       .eq("round_number", game.round_number)
       .maybeSingle(),
-    supabase
-      .from("roles")
-      .select("player_id")
-      .eq("game_id", gameId)
-      .eq("is_lead_impostor", true)
-      .maybeSingle()
+    game.status !== "lobby"
+      ? await supabase
+          .from("roles")
+          .select("player_id")
+          .eq("game_id", gameId)
+          .eq("is_lead_impostor", true)
+          .maybeSingle()
+      : { data: null },
+    round
+      ? await supabase
+          .from("eliminations")
+          .select("player_id, reason")
+          .eq("round_id", round.id)
+      : { data: [] as Array<{ player_id: string; reason: "vote" | "kill" }> },
+    game.status !== "lobby"
+      ? await supabase
+          .from("roles")
+          .select("player_id, role")
+          .eq("game_id", gameId)
+      : { data: [] }
   ]);
 
   let currentRole: CurrentRole | null = null;
-  if (session) {
+  if (session && game.status !== "lobby") {
     const { data } = await supabase
       .from("roles")
       .select("role, is_lead_impostor")
@@ -84,7 +113,7 @@ export default async function GamePage({ params }: PageProps) {
     currentRole = (data as CurrentRole | null) ?? null;
   }
 
-  const { data: votes } = round
+  const { data: votes } = round && game.status !== "lobby"
     ? await supabase.from("votes").select("voter_player_id").eq("round_id", round.id)
     : { data: [] as { voter_player_id: string }[] };
 
@@ -144,8 +173,8 @@ export default async function GamePage({ params }: PageProps) {
   }
 
   return (
-    <section className="space-y-5">
-      <GameRealtime gameId={gameId} />
+    <section className="space-y-6">
+      {game.status === "lobby" ? <LobbyRealtime gameId={gameId} /> : <GameRealtime gameId={gameId} />}
 
       {session?.is_host && round?.voting_ends_at && game.status === "in_progress" && round.phase === "voting_open" ? (
         <AutoResolveOnTimeout
@@ -156,166 +185,164 @@ export default async function GamePage({ params }: PageProps) {
         />
       ) : null}
 
-      <header className="card space-y-2">
-        <p className="text-sm uppercase tracking-[0.15em] text-teal-800">Game Room</p>
-        <h1 className="text-3xl font-bold">Round {game.round_number}</h1>
-        <p>
-          Status: <span className="font-semibold">{game.status}</span>
-        </p>
-        {round ? <p className="text-sm text-slate-700">Phase: <span className="font-semibold">{round.phase}</span></p> : null}
-        {game.winner ? (
-          <p className="font-semibold text-emerald-800">Winner: {game.winner === "civilian" ? "Civilians" : "Impostors"}</p>
-        ) : null}
-        {currentPlayer ? (
-          <p className="text-sm text-slate-700">
-            You are <span className="font-semibold">{currentPlayer.name}</span>
-            {session?.is_host ? " (Host)" : ""}
-          </p>
-        ) : (
-          <p className="text-sm text-amber-700">You are viewing this game without a player session.</p>
-        )}
-        {session ? (
-          <Link className="text-sm font-semibold text-teal-800 underline" href={`/game/${gameId}/role`}>
-            Open Private Role Screen
-          </Link>
-        ) : null}
+      <header className="space-y-3">
+        <div>
+          <p className="text-sm uppercase tracking-[0.16em] text-cyan-400 font-semibold">Imposter Game</p>
+          <h1 className="text-4xl font-black bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Round {game.round_number}
+          </h1>
+        </div>
+        <div className="flex gap-3 flex-wrap">
+          <div className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+            game.status === "lobby"
+              ? "bg-yellow-900/40 border border-yellow-600 text-yellow-300"
+              : game.status === "finished"
+                ? "bg-emerald-900/40 border border-emerald-600 text-emerald-300"
+                : "bg-blue-900/40 border border-blue-600 text-blue-300"
+          }`}>
+            {game.status === "lobby" ? "⏳ LOBBY" : game.status === "finished" ? "✓ FINISHED" : "▶️ IN PROGRESS"}
+          </div>
+          {round && (
+            <div className="rounded-lg px-3 py-2 text-sm font-semibold bg-purple-900/40 border border-purple-600 text-purple-300">
+              {round.phase === "speaking_order" && "🗣️ SPEAKING"}
+              {round.phase === "voting_open" && "🗳️ VOTING"}
+              {round.phase === "resolution" && "📊 RESOLUTION"}
+            </div>
+          )}
+          {game.winner && (
+            <div className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+              game.winner === "civilian"
+                ? "bg-emerald-900/40 border border-emerald-600 text-emerald-300"
+                : "bg-red-900/40 border border-red-600 text-red-300"
+            }`}>
+              {game.winner === "civilian" ? "👥 CIVILIANS WIN" : "👹 IMPOSTORS WIN"}
+            </div>
+          )}
+        </div>
       </header>
 
-      {currentRole?.role === "civilian" && round?.secret_word ? (
-        <section className="card">
-          <p className="text-sm uppercase tracking-[0.15em] text-teal-700">Civilian Secret Word</p>
-          <p className="text-2xl font-bold text-teal-900">{round.secret_word}</p>
-          <p className="text-sm text-slate-600">Do not reveal this word directly. Give related clues during discussion.</p>
+      {currentPlayer ? (
+        <div className="rounded-lg border-2 border-cyan-500 bg-gradient-to-r from-cyan-900/20 to-blue-900/20 p-4 flex items-center gap-3">
+          <span className="text-3xl">{CHARACTER_EMOJIS[currentPlayer.character_emoji_id || "emoji_4"] || "🎭"}</span>
+          <div>
+            <p className="text-sm text-gray-400">Your Player</p>
+            <p className="font-bold text-cyan-100">{currentPlayer.name}</p>
+          </div>
+          {session?.is_host && (
+            <span className="ml-auto text-xs font-bold bg-cyan-600 text-white px-3 py-1 rounded-full">HOST</span>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-lg border-2 border-yellow-500 bg-gradient-to-r from-yellow-900/20 to-orange-900/20 p-4">
+          <p className="text-yellow-300 text-sm font-semibold">👁️ Spectator Mode - You are viewing this game without a player session</p>
+        </div>
+      )}
+
+      {game.status !== "lobby" && session ? (
+        <Link className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2 text-white font-semibold text-sm hover:from-purple-500 hover:to-pink-500 transition-all" href={`/game/${gameId}/role`}>
+          👤 View Your Private Role Card
+        </Link>
+      ) : null}
+
+      {currentRole?.role === "civilian" && round?.secret_word && round.phase !== "speaking_order" ? (
+        <section className="rounded-lg border-2 border-green-500 bg-gradient-to-br from-green-900/20 to-emerald-900/20 p-6 space-y-3">
+          <p className="text-sm uppercase tracking-widest font-bold text-green-300">🔐 Civilian Secret Word</p>
+          <button
+            type="button"
+            onClick={() => setWordRevealed(!wordRevealed)}
+            className="w-full rounded-lg border-2 border-dashed border-green-400 bg-slate-800/50 p-6 hover:bg-slate-700/50 transition-all"
+          >
+            {wordRevealed ? (
+              <p className="text-3xl font-bold text-green-300">{round.secret_word}</p>
+            ) : (
+              <p className="text-4xl font-bold text-green-400">?</p>
+            )}
+          </button>
+          <p className="text-xs text-gray-400 text-center">
+            {wordRevealed ? "Hide" : "Show"} your word - Give clues to identify impostors, don't say it directly!
+          </p>
         </section>
       ) : null}
 
-      {round?.voting_ends_at && game.status === "in_progress" && round.phase === "voting_open" ? (
+      {round?.voting_ends_at && game.status === "in_progress" && round.phase === "voting_open" && (
         <RoundTimer votingEndsAt={round.voting_ends_at} />
-      ) : null}
+      )}
 
       {session?.is_host ? <GameQrCard joinUrl={joinUrl} joinCode={game.join_code} /> : null}
 
-      {latestRoundEvent?.payload_json?.remaining_impostors !== undefined ? (
-        <section className="card">
-          <p className="font-semibold">Remaining impostors: {String(latestRoundEvent.payload_json.remaining_impostors)}</p>
-        </section>
-      ) : null}
-
-      {session?.is_host && game.status === "in_progress" && round?.phase === "voting_open" ? (
-        <section className="card space-y-2">
-          <h2 className="text-lg font-semibold">Voting Progress</h2>
-          <p className="text-sm text-slate-700">
-            {votesSubmittedCount} / {eligibleVoterCount} eligible players voted
-          </p>
-          <p className="text-xs text-slate-500">Lead impostor is excluded from voting by rule.</p>
-        </section>
-      ) : null}
-
-      <section className="card space-y-3">
-        <h2 className="text-xl font-semibold">Players</h2>
-        <PlayerList players={players ?? []} />
-      </section>
-
-      {game.status === "lobby" && session?.is_host ? (
-        <form action="/api/game/start" method="post" className="card">
+      {game.status === "lobby" && session?.is_host && (
+        <form action="/api/game/start" method="post" className="space-y-3">
           <input type="hidden" name="gameId" value={gameId} />
-          <button type="submit" className="rounded bg-teal-700 px-4 py-2 font-semibold text-white">
-            Start Game
+          <button type="submit" className="w-full rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-6 py-3 font-bold text-white transition-all hover:from-cyan-500 hover:to-blue-500 active:scale-95 shadow-lg">
+            🚀 START GAME
           </button>
         </form>
-      ) : null}
+      )}
 
-      {game.status === "in_progress" && round?.phase === "discussion" ? (
-        <section className="card space-y-3">
-          <h2 className="text-xl font-semibold">Discussion Phase</h2>
-          <p className="text-sm text-slate-700">
-            Players discuss spoken clues now. Voting timer has not started yet.
-          </p>
-          {speakingOrder.length > 0 ? (
-            <div className="space-y-2">
-              <p className="text-sm text-slate-700">
-                Speaking direction: <span className="font-semibold">{game.rotation_direction}</span>
-              </p>
-              <ol className="grid gap-1 text-sm sm:grid-cols-2">
-                {speakingOrder.map((player, index) => (
-                  <li key={player.id} className="rounded border border-slate-200 px-2 py-1">
-                    {index + 1}. {player.name} {player.is_alive ? "" : "(Eliminated)"}
-                  </li>
-                ))}
-              </ol>
-            </div>
-          ) : null}
-          {session?.is_host ? (
-            <form action="/api/game/start-voting" method="post">
-              <input type="hidden" name="gameId" value={gameId} />
-              <input type="hidden" name="roundNumber" value={game.round_number} />
-              <button type="submit" className="rounded bg-amber-700 px-4 py-2 font-semibold text-white">
-                Start Voting Timer
-              </button>
-            </form>
-          ) : (
-            <p className="text-sm text-slate-600">Waiting for host to start voting timer.</p>
-          )}
+      {/* Lobby Player List */}
+      {game.status === "lobby" && (
+        <section className="space-y-3">
+          <h2 className="text-xl font-bold">Waiting Players ({(players ?? []).length})</h2>
+          <PlayerList players={players ?? []} showStatus={false} />
         </section>
-      ) : null}
+      )}
 
-      {game.status === "in_progress" && round?.phase === "voting_open" ? (
-        <section className="card space-y-4">
-          <h2 className="text-xl font-semibold">Voting Phase</h2>
+      {/* Speaking Order Phase */}
+      {game.status === "in_progress" && round?.phase === "speaking_order" && currentPlayer && (
+        <SpeakingOrderPhase
+          players={players ?? []}
+          currentSpeakerId={round.current_speaker_id || null}
+          speakersCompleted={(round.speakers_completed as string[]) || []}
+          currentPlayerId={currentPlayer.id}
+          gameId={gameId}
+          roundNumber={game.round_number}
+        />
+      )}
 
-          {canVote ? (
-            <form action="/api/game/submit-vote" method="post" className="space-y-2">
-              <input type="hidden" name="gameId" value={gameId} />
-              <input type="hidden" name="roundNumber" value={game.round_number} />
-              <label className="flex flex-col gap-1 text-sm">
-                Vote Target
-                <select name="targetPlayerId" required className="rounded border border-slate-300 px-3 py-2">
-                  <option value="">Select player</option>
-                  {voteTargets.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" className="rounded bg-slate-800 px-4 py-2 text-white">Submit Vote</button>
-            </form>
-          ) : (
-            <p className="text-sm text-slate-600">
-              {isLeadImpostor ? "Lead impostor cannot vote this round." : "Voting unavailable for your current session."}
-            </p>
-          )}
+      {/* Voting Phase */}
+      {game.status === "in_progress" && round?.phase === "voting_open" && currentPlayer && (
+        <VotingPhaseComponent
+          players={players ?? []}
+          currentPlayerId={currentPlayer.id}
+          currentRole={currentRole}
+          gameId={gameId}
+          roundNumber={game.round_number}
+          votingEndsAt={round.voting_ends_at || ""}
+          isHost={session?.is_host || false}
+          votedIds={votedIds}
+          leadPlayerId={leadPlayerId}
+        />
+      )}
 
-          {canKill ? (
-            <form action="/api/game/submit-kill" method="post" className="space-y-2">
-              <input type="hidden" name="gameId" value={gameId} />
-              <input type="hidden" name="roundNumber" value={game.round_number} />
-              <label className="flex flex-col gap-1 text-sm">
-                Lead Kill Target
-                <select name="targetPlayerId" required className="rounded border border-slate-300 px-3 py-2">
-                  <option value="">Select player</option>
-                  {killTargets.map((player) => (
-                    <option key={player.id} value={player.id}>
-                      {player.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button type="submit" className="rounded bg-red-700 px-4 py-2 text-white">Submit Kill</button>
-            </form>
-          ) : (
-            <p className="text-sm text-slate-600">Only active lead impostor can submit kill.</p>
-          )}
+      {/* Results Phase */}
+      {game.status === "in_progress" && round?.phase === "resolution" && (
+        <ResultsScreenComponent
+          players={players ?? []}
+          eliminations={(eliminations ?? []) as Array<{ player_id: string; reason: "vote" | "kill" }>}
+          remainingImpostors={latestRoundEvent?.payload_json?.remaining_impostors ?? 0}
+          winner={game.winner}
+          isHost={session?.is_host || false}
+          gameId={gameId}
+          roundNumber={game.round_number}
+          roleMap={
+            roles?.reduce(
+              (acc, r: { player_id: string; role: string }) => ({
+                ...acc,
+                [r.player_id]: r.role as "civilian" | "impostor"
+              }),
+              {}
+            ) || {}
+          }
+        />
+      )}
 
-          {session?.is_host ? (
-            <form action="/api/game/resolve-round" method="post">
-              <input type="hidden" name="gameId" value={gameId} />
-              <input type="hidden" name="roundNumber" value={game.round_number} />
-              <button type="submit" className="rounded bg-amber-700 px-4 py-2 font-semibold text-white">Resolve Round</button>
-            </form>
-          ) : null}
+      {/* All Players List */}
+      {game.status !== "lobby" && (
+        <section className="space-y-3">
+          <h2 className="text-xl font-bold">Players ({(players ?? []).filter(p => p.is_alive).length} Alive)</h2>
+          <PlayerList players={players ?? []} showStatus={true} highlightPlayerId={round?.current_speaker_id || undefined} />
         </section>
-      ) : null}
+      )}
     </section>
   );
 }

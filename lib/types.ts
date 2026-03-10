@@ -13,6 +13,7 @@ export type Player = {
   name: string;
   is_alive: boolean;
   joined_at: string;
+  character_emoji_id?: string | null;
 };
 
 export type RoleRecord = {

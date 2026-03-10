@@ -8,7 +8,8 @@ export const createGameSchema = z.object({
 
 export const joinGameSchema = z.object({
   joinCode: z.string().trim().min(4).max(12).toUpperCase(),
-  playerName: z.string().trim().min(2).max(24)
+  playerName: z.string().trim().min(2).max(24),
+  characterEmojiId: z.string().trim().min(1).optional()
 });
 
 export const startGameSchema = z.object({

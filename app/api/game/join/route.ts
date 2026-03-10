@@ -7,7 +7,8 @@ export async function POST(request: Request) {
   const formData = await request.formData();
   const parsed = joinGameSchema.safeParse({
     joinCode: formData.get("joinCode"),
-    playerName: formData.get("playerName")
+    playerName: formData.get("playerName"),
+    characterEmojiId: formData.get("characterEmojiId")
   });
 
   if (!parsed.success) {
@@ -30,11 +31,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Game has already started" }, { status: 400 });
   }
 
+  // Check if player with same name already exists (case-insensitive)
+  const { data: existingPlayer } = await supabase
+    .from("players")
+    .select("id")
+    .eq("game_id", game.id)
+    .ilike("name", parsed.data.playerName)
+    .maybeSingle();
+
+  if (existingPlayer) {
+    return NextResponse.json({ error: "A player with this name already joined this game" }, { status: 400 });
+  }
+
   const { data: player, error: playerError } = await supabase
     .from("players")
     .insert({
       game_id: game.id,
       name: parsed.data.playerName,
+      character_emoji_id: parsed.data.characterEmojiId || null,
       is_alive: true
     })
     .select("id")

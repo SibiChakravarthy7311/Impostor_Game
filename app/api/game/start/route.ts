@@ -87,9 +87,12 @@ export async function POST(request: Request) {
   const { error: roundError } = await supabase.from("rounds").insert({
     game_id: parsed.data.gameId,
     round_number: 1,
-    phase: "discussion",
+    phase: "speaking_order",
     voting_ends_at: null,
-    secret_word: randomSecretWord()
+    secret_word: randomSecretWord(),
+    current_speaker_id: players[0].id,
+    speaking_order: players.map((p) => p.id),
+    speakers_completed: []
   });
 
   if (roundError) {

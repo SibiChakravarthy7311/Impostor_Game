@@ -45,8 +45,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Game or round not found" }, { status: 404 });
   }
 
-  if (round.phase !== "discussion") {
-    return NextResponse.json({ error: "Voting can only start from discussion phase" }, { status: 400 });
+  if (round.phase !== "speaking_order") {
+    return NextResponse.json({ error: "Voting can only start from speaking_order phase" }, { status: 400 });
   }
 
   const votingSeconds = Math.max(30, Number(game.settings_json?.votingSeconds ?? 90));

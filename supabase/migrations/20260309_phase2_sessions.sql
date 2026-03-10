@@ -1,4 +1,4 @@
-﻿create table if not exists public.player_sessions (
+create table if not exists public.player_sessions (
   session_token text primary key,
   game_id uuid not null references public.games(id) on delete cascade,
   player_id uuid not null references public.players(id) on delete cascade,
