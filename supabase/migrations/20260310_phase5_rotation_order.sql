@@ -28,3 +28,4 @@ set starting_player_id = f.player_id
 from first_player_per_game f
 where g.id = f.game_id
   and g.starting_player_id is null;
+
