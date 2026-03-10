@@ -16,13 +16,15 @@ begin
   end if;
 end $$;
 
+with first_player_per_game as (
+  select distinct on (p.game_id)
+    p.game_id,
+    p.id as player_id
+  from public.players p
+  order by p.game_id, p.joined_at
+)
 update public.games g
-set starting_player_id = p.id
-from lateral (
-  select id
-  from public.players
-  where game_id = g.id
-  order by joined_at
-  limit 1
-) p
-where g.starting_player_id is null;
+set starting_player_id = f.player_id
+from first_player_per_game f
+where g.id = f.game_id
+  and g.starting_player_id is null;
