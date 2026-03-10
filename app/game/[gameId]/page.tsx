@@ -250,9 +250,9 @@ export default async function GamePage({ params }: PageProps) {
         </Link>
       ) : null}
 
-      {round?.voting_ends_at && game.status === "in_progress" && round.phase === "voting_open" && (
+      {/* {round?.voting_ends_at && game.status === "in_progress" && round.phase === "voting_open" && (
         <RoundTimer votingEndsAt={round.voting_ends_at} />
-      )}
+      )} */}
 
       {session?.is_host ? <GameQrCard joinUrl={joinUrl} joinCode={game.join_code} /> : null}
 
