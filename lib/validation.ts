@@ -15,6 +15,11 @@ export const startGameSchema = z.object({
   gameId: z.string().uuid()
 });
 
+export const startVotingSchema = z.object({
+  gameId: z.string().uuid(),
+  roundNumber: z.coerce.number().int().positive()
+});
+
 export const submitVoteSchema = z.object({
   gameId: z.string().uuid(),
   roundNumber: z.coerce.number().int().positive(),

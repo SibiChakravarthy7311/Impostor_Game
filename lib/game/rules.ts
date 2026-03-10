@@ -4,7 +4,6 @@ type ResolveInput = {
   alivePlayerIds: string[];
   roleRecords: RoleRecord[];
   votes: VoteRecord[];
-  leadVoteTargetId: string | null;
   leadKillTargetId: string | null;
 };
 
@@ -32,8 +31,6 @@ export function resolveRound(input: ResolveInput): RoundResolution {
 
     if (tied.length === 1) {
       voteEliminatedPlayerId = tied[0];
-    } else if (input.leadVoteTargetId && tied.includes(input.leadVoteTargetId)) {
-      voteEliminatedPlayerId = input.leadVoteTargetId;
     }
   }
 

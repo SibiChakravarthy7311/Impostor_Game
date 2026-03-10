@@ -15,9 +15,7 @@ export default async function RolePage({ params }: PageProps) {
 
   const cookieStore = await cookies();
   const sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value;
-  if (!sessionToken) {
-    notFound();
-  }
+  if (!sessionToken) notFound();
 
   const { data: session } = await supabase
     .from("player_sessions")
@@ -26,22 +24,28 @@ export default async function RolePage({ params }: PageProps) {
     .eq("game_id", gameId)
     .maybeSingle();
 
-  if (!session) {
-    notFound();
-  }
+  if (!session) notFound();
 
-  const [{ data: role }, { data: game }, { data: player }] = await Promise.all([
+  const { data: game } = await supabase.from("games").select("round_number").eq("id", gameId).maybeSingle();
+  if (!game) notFound();
+
+  const [{ data: role }, { data: player }, { data: round }] = await Promise.all([
     supabase
       .from("roles")
       .select("role, is_lead_impostor")
       .eq("game_id", gameId)
       .eq("player_id", session.player_id)
       .maybeSingle(),
-    supabase.from("games").select("round_number").eq("id", gameId).maybeSingle(),
-    supabase.from("players").select("name").eq("id", session.player_id).maybeSingle()
+    supabase.from("players").select("name").eq("id", session.player_id).maybeSingle(),
+    supabase
+      .from("rounds")
+      .select("secret_word")
+      .eq("game_id", gameId)
+      .eq("round_number", game.round_number)
+      .maybeSingle()
   ]);
 
-  if (!role || !game || !player) {
+  if (!role || !player) {
     return (
       <section className="card space-y-3">
         <h1 className="text-2xl font-bold">Role Not Available Yet</h1>
@@ -60,6 +64,7 @@ export default async function RolePage({ params }: PageProps) {
         role={role.role as "civilian" | "impostor"}
         isLeadImpostor={Boolean(role.is_lead_impostor)}
         roundNumber={game.round_number}
+        secretWord={role.role === "civilian" ? round?.secret_word ?? null : null}
       />
       <Link className="inline-block rounded bg-slate-800 px-4 py-2 text-white" href={`/game/${gameId}`}>
         Back To Game

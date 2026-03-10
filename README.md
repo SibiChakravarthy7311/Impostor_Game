@@ -1,7 +1,7 @@
-# Impostor_Game
+﻿# Impostor_Game
 Impostor Game - Group of friends can play together and have fun
 =======
-﻿# Imposter Game (Lead Impostor Variant)
+ï»¿# Imposter Game (Lead Impostor Variant)
 
 Realtime party game web app built with Next.js + Supabase.
 
@@ -66,7 +66,7 @@ cp .env.example .env.local
 4. Apply SQL migrations in order:
 - `supabase/migrations/20260309_init.sql`
 - `supabase/migrations/20260309_phase2_sessions.sql`
-- `supabase/migrations/20260309_phase3_timer_and_role.sql`
+- `supabase/migrations/20260309_phase3_timer_and_role.sql`n- `supabase/migrations/20260309_phase4_discussion_word_and_lead_vote_rule.sql`n- `supabase/migrations/20260310_phase5_rotation_order.sql``
 
 5. Run dev server.
 

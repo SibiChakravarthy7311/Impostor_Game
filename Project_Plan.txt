@@ -78,7 +78,7 @@ Function:
 - Run migrations in order:
   - supabase/migrations/20260309_init.sql
   - supabase/migrations/20260309_phase2_sessions.sql
-  - supabase/migrations/20260309_phase3_timer_and_role.sql
+  - supabase/migrations/20260309_phase3_timer_and_role.sql`n  - supabase/migrations/20260309_phase4_discussion_word_and_lead_vote_rule.sql`n  - supabase/migrations/20260310_phase5_rotation_order.sql
 - Configure env vars in Vercel
 - Deploy Next.js app
 - Smoke-test create/join/start/resolve cycle

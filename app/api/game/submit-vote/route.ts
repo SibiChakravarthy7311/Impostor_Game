@@ -32,12 +32,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Session does not belong to this game" }, { status: 403 });
   }
 
-  const [{ data: actor }, { data: target }, { data: round }] = await Promise.all([
+  const [{ data: actor }, { data: actorRole }, { data: target }, { data: round }] = await Promise.all([
     supabase
       .from("players")
       .select("id, is_alive")
       .eq("id", session.player_id)
       .eq("game_id", parsed.data.gameId)
+      .maybeSingle(),
+    supabase
+      .from("roles")
+      .select("role, is_lead_impostor")
+      .eq("game_id", parsed.data.gameId)
+      .eq("player_id", session.player_id)
       .maybeSingle(),
     supabase
       .from("players")
@@ -55,6 +61,10 @@ export async function POST(request: Request) {
 
   if (!actor?.is_alive) {
     return NextResponse.json({ error: "Only alive players can vote" }, { status: 403 });
+  }
+
+  if (actorRole?.role === "impostor" && actorRole.is_lead_impostor) {
+    return NextResponse.json({ error: "Lead impostor cannot vote" }, { status: 403 });
   }
 
   if (!target?.is_alive) {

@@ -6,9 +6,10 @@ type Props = {
   role: "civilian" | "impostor";
   isLeadImpostor: boolean;
   roundNumber: number;
+  secretWord: string | null;
 };
 
-export function RoleRevealCard({ role, isLeadImpostor, roundNumber }: Props) {
+export function RoleRevealCard({ role, isLeadImpostor, roundNumber, secretWord }: Props) {
   const [revealed, setRevealed] = useState(false);
 
   return (
@@ -22,12 +23,15 @@ export function RoleRevealCard({ role, isLeadImpostor, roundNumber }: Props) {
             {role === "impostor" ? "Impostor" : "Civilian"}
             {isLeadImpostor ? " (Lead)" : ""}
           </p>
+          {role === "civilian" && secretWord ? (
+            <p className="mt-2 text-sm font-semibold text-teal-800">Secret word: {secretWord}</p>
+          ) : null}
           <p className="mt-2 text-sm text-slate-600">
             {role === "impostor"
               ? isLeadImpostor
-                ? "You can vote and choose one kill target each round."
-                : "Blend in and support impostor strategy."
-              : "Find and vote out impostors."}
+                ? "You can only choose kill target. You cannot vote this round."
+                : "You can vote. Only the lead impostor can kill."
+              : "Use the secret word to describe related clues and identify impostors."}
           </p>
         </div>
       ) : (

@@ -1,6 +1,7 @@
 ﻿import { NextResponse } from "next/server";
 import { createServerSupabaseClient } from "../../../../lib/supabase/server";
 import { getSessionTokenFromRequest } from "../../../../lib/auth/session";
+import { randomSecretWord } from "../../../../lib/game/words";
 import { startGameSchema } from "../../../../lib/validation";
 
 function shuffled<T>(items: T[]): T[] {
@@ -53,7 +54,6 @@ export async function POST(request: Request) {
   }
 
   const impostorCount = Math.max(1, Number(game.settings_json?.impostorCount ?? 1));
-  const votingSeconds = Math.max(30, Number(game.settings_json?.votingSeconds ?? 90));
 
   const { data: players, error: playersError } = await supabase
     .from("players")
@@ -69,6 +69,8 @@ export async function POST(request: Request) {
   const playerIds = shuffled(players.map((p) => p.id));
   const impostorIds = playerIds.slice(0, impostorCount);
   const leadId = impostorIds[0];
+  const rotationDirection = Math.random() < 0.5 ? "clockwise" : "anticlockwise";
+  const startingPlayerId = players[Math.floor(Math.random() * players.length)]?.id ?? players[0].id;
 
   const roleRows = players.map((p) => ({
     game_id: parsed.data.gameId,
@@ -82,16 +84,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: roleError.message }, { status: 500 });
   }
 
-  const votingEndsAt = new Date(Date.now() + votingSeconds * 1000).toISOString();
-  const { error: roundError } = await supabase
-    .from("rounds")
-    .insert({ game_id: parsed.data.gameId, round_number: 1, phase: "voting_open", voting_ends_at: votingEndsAt });
+  const { error: roundError } = await supabase.from("rounds").insert({
+    game_id: parsed.data.gameId,
+    round_number: 1,
+    phase: "discussion",
+    voting_ends_at: null,
+    secret_word: randomSecretWord()
+  });
 
   if (roundError) {
     return NextResponse.json({ error: roundError.message }, { status: 500 });
   }
 
-  await supabase.from("games").update({ status: "in_progress", round_number: 1 }).eq("id", parsed.data.gameId);
+  await supabase
+    .from("games")
+    .update({
+      status: "in_progress",
+      round_number: 1,
+      rotation_direction: rotationDirection,
+      starting_player_id: startingPlayerId
+    })
+    .eq("id", parsed.data.gameId);
 
   return NextResponse.redirect(new URL(`/game/${parsed.data.gameId}`, request.url), 303);
 }
